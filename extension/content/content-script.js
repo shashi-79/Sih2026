@@ -137,6 +137,42 @@
     return sensitiveRects;
   }
 
+  /**
+   * Scans for visual face / avatar regions in DOM: profile images, canvas avatars, user badges
+   */
+  function scanVisualFaceRegions() {
+    const faceRects = [];
+    const faceSelectors = [
+      'canvas#faceAvatar',
+      'canvas[data-face]',
+      '[id*="avatar"]',
+      '[class*="avatar"]',
+      '[id*="face"]',
+      '[class*="face"]',
+      'img[src*="avatar"]',
+      'img[src*="profile"]',
+      'img[alt*="avatar"]',
+      'img[alt*="profile"]',
+      '.user-avatar',
+      '.profile-pic'
+    ].join(', ');
+
+    const nodes = document.querySelectorAll(faceSelectors);
+    nodes.forEach(el => {
+      if (isElementVisible(el)) {
+        const r = el.getBoundingClientRect();
+        faceRects.push({
+          x: Math.round(r.x),
+          y: Math.round(r.y),
+          w: Math.round(r.width),
+          h: Math.round(r.height)
+        });
+      }
+    });
+
+    return faceRects;
+  }
+
   function isElementVisible(el) {
     if (!el) return false;
     const style = window.getComputedStyle(el);
@@ -159,6 +195,13 @@
    */
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (!message || !message.action) return false;
+    if (
+      message.action !== 'GENERATE_FALLBACK_SCREENSHOT' &&
+      message.action !== 'SCAN_VIEWPORT' &&
+      message.action !== 'EXECUTE_TOOL'
+    ) {
+      return false;
+    }
 
     (async () => {
       try {
@@ -198,7 +241,7 @@
               }
             }
 
-            const dataUrl = canvas.toDataURL('image/png');
+            const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
             sendResponse({ ok: true, dataUrl });
             break;
           }
@@ -206,12 +249,14 @@
           case 'SCAN_VIEWPORT': {
             const elements = scanInteractiveElements();
             const pii = scanPIIBoundingBoxes();
+            const faces = scanVisualFaceRegions();
             sendResponse({
               ok: true,
               frame: frameIdentifier,
               isTop: isTopFrame,
               elements,
               piiRects: pii,
+              faceRects: faces,
               url: window.location.href
             });
             break;

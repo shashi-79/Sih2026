@@ -16,9 +16,56 @@ chrome.runtime.onInstalled.addListener(async (details) => {
   // Store default extension settings
   await chrome.storage.local.set({
     voiceEnabled: true,
+    autoMicEnabled: true,
+    bgAgentAlwaysOn: true,
     privacyLevel: 'strict',
     installedAt: Date.now()
   });
+});
+
+/**
+ * Persistent Keep-Alive Port:
+ * Maintains the service worker active and prevents idle suspension while sidepanel is active
+ */
+chrome.runtime.onConnect.addListener((port) => {
+  if (port.name === 'bg-agent-keepalive') {
+    port.onMessage.addListener((msg) => {
+      if (msg && msg.type === 'PING') {
+        port.postMessage({ type: 'PONG', ts: Date.now() });
+      }
+    });
+  }
+});
+
+/**
+ * Active Tab Watchdog:
+ * Continuously monitors user navigation and notifies the background agent fleet
+ */
+chrome.tabs.onActivated.addListener(async (activeInfo) => {
+  try {
+    const tab = await chrome.tabs.get(activeInfo.tabId);
+    if (tab && tab.url && !tab.url.startsWith('chrome://') && !tab.url.startsWith('chrome-extension://')) {
+      chrome.runtime.sendMessage({
+        target: 'sidepanel',
+        action: 'PAGE_STATE_CHANGED',
+        tabId: tab.id,
+        url: tab.url,
+        reason: 'activated'
+      }).catch(() => {});
+    }
+  } catch (e) {}
+});
+
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  if (changeInfo.status === 'complete' && tab && tab.url && !tab.url.startsWith('chrome://') && !tab.url.startsWith('chrome-extension://')) {
+    chrome.runtime.sendMessage({
+      target: 'sidepanel',
+      action: 'PAGE_STATE_CHANGED',
+      tabId: tab.id,
+      url: tab.url,
+      reason: 'updated'
+    }).catch(() => {});
+  }
 });
 
 /**
@@ -54,31 +101,39 @@ async function hasOffscreenDocument() {
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!message || !message.action) return false;
 
+  // Crucial: do NOT intercept messages targeted at offscreen or other components
+  if (message.target && message.target !== 'background') return false;
+
+  // Only handle actions belonging to the background service worker
+  if (message.action !== 'CAPTURE_AND_REDACT' && message.action !== 'EXECUTE_PAGE_TOOL') {
+    return false;
+  }
+
   (async () => {
     try {
       switch (message.action) {
         case 'CAPTURE_AND_REDACT': {
           // 1. Find the target web page tab (skipping internal chrome:// and chrome-extension:// tabs)
           const allTabs = await chrome.tabs.query({ lastFocusedWindow: true });
-          let tab = allTabs.find(t => t.active && !t.url.startsWith('chrome://') && !t.url.startsWith('chrome-extension://'));
+          let tab = allTabs.find(t => t.active && t.url && !t.url.startsWith('chrome://') && !t.url.startsWith('chrome-extension://'));
           if (!tab) {
-            tab = allTabs.find(t => !t.url.startsWith('chrome://') && !t.url.startsWith('chrome-extension://'));
+            tab = allTabs.find(t => t.url && !t.url.startsWith('chrome://') && !t.url.startsWith('chrome-extension://'));
           }
 
           if (!tab || !tab.id) {
             sendResponse({ 
               ok: false, 
-              error: 'Please open or focus a web page (e.g. the benchmark test page or any website). Extensions cannot capture internal chrome:// pages.' 
+              error: 'Please open or focus a web page (e.g. http://localhost:5000/test/benchmark.html). Extensions cannot capture internal chrome:// pages.' 
             });
             return;
           }
 
-          // 2. Capture visible tab image as DataURL with automatic fallback
+          // 2. Ultra-low latency capture: JPEG format at 85% quality (<25ms vs >250ms PNG)
           let rawDataUrl = null;
           try {
-            rawDataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, { format: 'png' });
+            rawDataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, { format: 'jpeg', quality: 85 });
           } catch (captureErr) {
-            console.warn('[VisionAgent:SW] captureVisibleTab failed, auto-injecting content script fallback:', captureErr.message);
+            console.warn('[VisionAgent:SW] captureVisibleTab failed, trying content script fallback:', captureErr.message);
             try {
               // Ensure content script is injected before requesting fallback screenshot
               await chrome.scripting.executeScript({
@@ -97,12 +152,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           if (!rawDataUrl) {
             sendResponse({ 
               ok: false, 
-              error: "Cannot capture tab. If viewing a local file:// URL, enable 'Allow access to file URLs' in chrome://extensions -> Details, or run http://localhost:5000" 
+              error: "Cannot capture tab. If viewing a local file:// URL, enable 'Allow access to file URLs' in chrome://extensions -> Details, or use http://localhost:5000/test/benchmark.html" 
             });
             return;
           }
 
-          // 2. Query elements and PII rects from all frames in tab
+          // 3. Query elements, PII rects, and face regions from all frames in tab
           let framesData = [];
           try {
             const resp = await chrome.tabs.sendMessage(tab.id, { action: 'SCAN_VIEWPORT' });
@@ -110,7 +165,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
               framesData.push(resp);
             }
           } catch (err) {
-            // Tab was opened before extension reload or injection pending: auto-inject now!
+            // Tab was opened before extension reload or injection pending: auto-inject now
             try {
               await chrome.scripting.executeScript({
                 target: { tabId: tab.id, allFrames: true },
@@ -125,23 +180,26 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             }
           }
 
-          // Aggregate PII rects and interactive elements across all frames
+          // Aggregate PII rects, face rects, and interactive elements across all frames
           const allPiiRects = [];
+          const allFaceRects = [];
           const allElements = [];
           for (const fd of framesData) {
             if (Array.isArray(fd.piiRects)) allPiiRects.push(...fd.piiRects);
+            if (Array.isArray(fd.faceRects)) allFaceRects.push(...fd.faceRects);
             if (Array.isArray(fd.elements)) allElements.push(...fd.elements);
           }
 
-          // 3. Ensure Offscreen Document is loaded
+          // 4. Ensure Offscreen Document is active for OpenCV processing
           await ensureOffscreenDocument();
 
-          // 4. Dispatch to Offscreen OpenCV for blurring and blackout masking
+          // 5. Dispatch to Offscreen OpenCV for region detection, cropping, and blurring
           const redactResp = await chrome.runtime.sendMessage({
             target: 'offscreen',
             action: 'REDACT_SCREEN',
             dataUrl: rawDataUrl,
             piiRects: allPiiRects,
+            faceRects: allFaceRects,
             dpr: 1
           });
 

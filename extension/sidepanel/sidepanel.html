@@ -27,7 +27,7 @@
     <section class="card voice-card">
       <div class="card-header">
         <h2>Goal & Voice Control</h2>
-        <span class="badge" id="voiceStatusBadge">STT Ready</span>
+        <span class="badge" id="voiceStatusBadge">🎙️ Auto-Mic Active</span>
       </div>
       <div class="voice-input-row">
         <input 
@@ -36,13 +36,26 @@
           placeholder="Speak or type aim (e.g. 'Submit checkout form safely')..."
           value="Redact sensitive data and complete the form"
         />
-        <button id="micBtn" class="btn-icon" title="Toggle Voice (STT)">
+        <button id="micBtn" class="btn-icon recording" title="Auto-Mic Active (Listening continuously)">
           <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
             <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
             <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
           </svg>
         </button>
       </div>
+
+      <!-- Live Auto-Mic & BG Agent Always-On Indicators -->
+      <div class="status-indicators-row">
+        <div class="privacy-badge badge-mic-on" id="autoMicBadge" title="Continuous hands-free speech recognition">
+          <span class="pulse-dot dot-cyan"></span>
+          <span id="autoMicText">Auto-Mic: Listening</span>
+        </div>
+        <div class="privacy-badge badge-bg-on" id="bgAgentBadge" title="Background agent fleet actively monitoring and ready">
+          <span class="pulse-dot dot-green"></span>
+          <span>BG Agent: Always On</span>
+        </div>
+      </div>
+
       <div class="action-btn-row">
         <button id="scanBtn" class="btn btn-secondary">
           <span>🔍</span> Scan & Redact

@@ -67,9 +67,21 @@ class AgentFactory {
           const utterance = new SpeechSynthesisUtterance(speechText);
           utterance.rate = 1.05;
           utterance.pitch = 1.0;
+
+          utterance.onstart = () => {
+            this.bus.emit('AUDIO_START', { text: speechText });
+          };
+          utterance.onend = () => {
+            this.bus.emit('AUDIO_FINISHED', { text: speechText });
+          };
+          utterance.onerror = () => {
+            this.bus.emit('AUDIO_FINISHED', { text: speechText });
+          };
+
           window.speechSynthesis.speak(utterance);
         } catch (err) {
           console.warn('[ResponseAgent] Speech synthesis notice:', err);
+          this.bus.emit('AUDIO_FINISHED', { text: speechText });
         }
       }, 10);
     }

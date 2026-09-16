@@ -16,6 +16,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   const scanBtn = document.getElementById('scanBtn');
   const runAgentBtn = document.getElementById('runAgentBtn');
   const voiceStatusBadge = document.getElementById('voiceStatusBadge');
+  const autoMicBadge = document.getElementById('autoMicBadge');
+  const autoMicText = document.getElementById('autoMicText');
+  const bgAgentBadge = document.getElementById('bgAgentBadge');
   const metricPiiCount = document.getElementById('metricPiiCount');
   const metricFaceCount = document.getElementById('metricFaceCount');
   const metricLatency = document.getElementById('metricLatency');
@@ -35,6 +38,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   let currentScanData = null;
   let recognition = null;
   let isRecording = false;
+  let autoMicActive = true;
+  let bgAgentAlwaysOn = true;
+  let isSpeakingTTS = false;
+  let isExecutingWorkflow = false;
+  let keepAlivePort = null;
 
   function appendLog(text, type = 'system') {
     const entry = document.createElement('div');
@@ -82,6 +90,22 @@ document.addEventListener('DOMContentLoaded', async () => {
     activeAgentBadge.textContent = `${3 + factory.getActiveSubAgentCount()} Agents Active`;
   });
 
+  bus.on('AUDIO_START', () => {
+    isSpeakingTTS = true;
+    // Temporarily pause recognition to prevent mic hearing computer's own voice
+    if (recognition && isRecording) {
+      try { recognition.abort(); } catch (e) {}
+    }
+  });
+
+  bus.on('AUDIO_FINISHED', () => {
+    isSpeakingTTS = false;
+    // Resume auto-mic listening immediately after TTS finishes speaking
+    if (autoMicActive) {
+      setTimeout(() => startListeningSafely(), 300);
+    }
+  });
+
   bus.on('AUDIO_SPOKEN', ({ text }) => {
     appendLog(`🔊 Response Agent (TTS): "${text}"`, 'voice');
   });
@@ -112,96 +136,174 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (node) node.remove();
   }
 
-  // 2. Setup Native Browser Voice STT (Speech-to-Text)
+  // ==========================================
+  // 2. Continuous Auto-Mic (Always-On Voice Loop)
+  // ==========================================
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (SpeechRecognition) {
+
+  function initContinuousAutoMic() {
+    if (!SpeechRecognition) {
+      voiceStatusBadge.textContent = 'STT Unavailable';
+      autoMicText.textContent = 'Auto-Mic: Unsupported';
+      micBtn.style.opacity = '0.5';
+      micBtn.title = 'SpeechRecognition API not supported in this browser';
+      return;
+    }
+
     recognition = new SpeechRecognition();
-    recognition.continuous = false;
+    recognition.continuous = true;
     recognition.interimResults = false;
     recognition.lang = 'en-US';
 
     recognition.onstart = () => {
       isRecording = true;
       micBtn.classList.add('recording');
-      voiceStatusBadge.textContent = 'Listening...';
+      voiceStatusBadge.textContent = '🎙️ Auto-Mic: Listening';
       voiceStatusBadge.className = 'badge badge-accent';
-      appendLog('🎙️ Microphone active: Speak your goal now...', 'voice');
+      autoMicText.textContent = 'Auto-Mic: Listening';
     };
 
-    recognition.onresult = (event) => {
-      const transcript = event.results[0][0].transcript;
+    recognition.onresult = async (event) => {
+      if (isSpeakingTTS) return; // Ignore audio spoken by TTS
+
+      const results = event.results;
+      const transcript = (results[results.length - 1][0].transcript || '').trim();
+      if (!transcript) return;
+
       goalInput.value = transcript;
-      appendLog(`STT Captured: "${transcript}"`, 'voice');
-      // Pass directly to Conversation Agent
-      factory.handleUserInput(transcript);
+      appendLog(`🎙️ Voice Captured: "${transcript}"`, 'voice');
+
+      // Hands-free trigger: automatically run workflow with the spoken goal
+      if (!isExecutingWorkflow) {
+        appendLog(`⚡ Autonomous Agent executing goal from voice...`, 'action');
+        await runAutonomousWorkflow(transcript);
+      }
     };
 
     recognition.onerror = (event) => {
-      isRecording = false;
-      micBtn.classList.remove('recording');
+      // no-speech or aborted are normal in continuous recognition slices
+      if (event.error === 'no-speech' || event.error === 'aborted') {
+        return;
+      }
 
-      if (event.error === 'no-speech') {
-        voiceStatusBadge.textContent = 'STT Ready';
-        voiceStatusBadge.className = 'badge';
-        appendLog('No speech detected in time window. Click mic to try again.', 'system');
-      } else if (event.error === 'not-allowed') {
+      if (event.error === 'not-allowed') {
         voiceStatusBadge.textContent = 'Mic Permission Required';
-        voiceStatusBadge.className = 'badge';
-        appendLog('Microphone permission not granted. Opening permission tab...', 'system');
+        autoMicText.textContent = 'Auto-Mic: Needs Permission';
+        appendLog('Microphone permission required for auto-mic. Opening permission helper...', 'system');
         chrome.tabs.create({ url: chrome.runtime.getURL('sidepanel/permission.html') });
       } else if (event.error === 'audio-capture') {
         voiceStatusBadge.textContent = 'No Mic Detected';
-        voiceStatusBadge.className = 'badge';
-        appendLog('No microphone hardware found. You can type directly in the goal box.', 'system');
+        autoMicText.textContent = 'Auto-Mic: No Hardware';
       } else {
-        voiceStatusBadge.textContent = 'STT Error';
-        voiceStatusBadge.className = 'badge';
-        appendLog(`Speech recognition note (${event.error}). You can type directly.`, 'system');
+        console.warn('[VisionAgent:Voice] STT notice:', event.error);
       }
     };
 
     recognition.onend = () => {
       isRecording = false;
-      micBtn.classList.remove('recording');
-      if (voiceStatusBadge.textContent === 'Listening...') {
-        voiceStatusBadge.textContent = 'STT Ready';
+      // Auto-restart loop immediately unless user explicitly toggled it off or TTS is active
+      if (autoMicActive && !isSpeakingTTS) {
+        setTimeout(() => {
+          if (autoMicActive && !isRecording && !isSpeakingTTS) {
+            startListeningSafely();
+          }
+        }, 200);
+      } else if (!autoMicActive) {
+        micBtn.classList.remove('recording');
+        voiceStatusBadge.textContent = 'Mic Paused';
         voiceStatusBadge.className = 'badge';
+        autoMicText.textContent = 'Auto-Mic: Paused';
       }
     };
 
-    micBtn.addEventListener('click', async () => {
-      if (isRecording) {
-        recognition.stop();
-        return;
-      }
-
-      // Check mic permission via getUserMedia before starting recognition
-      try {
-        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-          stream.getTracks().forEach(t => t.stop());
-        }
-        recognition.start();
-      } catch (err) {
-        if (err.name === 'NotAllowedError') {
-          appendLog('Microphone access not allowed. Opening permission tab...', 'system');
-          chrome.tabs.create({ url: chrome.runtime.getURL('sidepanel/permission.html') });
-        } else {
-          try {
-            recognition.start();
-          } catch (e) {
-            console.warn('[VisionAgent] Speech start fallback:', e);
-          }
-        }
-      }
-    });
-  } else {
-    voiceStatusBadge.textContent = 'STT Unavailable';
-    micBtn.style.opacity = '0.5';
-    micBtn.title = 'SpeechRecognition API not supported in this environment';
+    // Start auto-listening immediately on load
+    startListeningSafely();
   }
 
-  // 3. Scan & Redact Handler
+  async function startListeningSafely() {
+    if (!recognition || isRecording || isSpeakingTTS) return;
+
+    try {
+      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        stream.getTracks().forEach(t => t.stop());
+      }
+      recognition.start();
+    } catch (err) {
+      if (err.name === 'NotAllowedError') {
+        appendLog('Click mic icon to grant microphone access for continuous auto-mic.', 'system');
+      } else {
+        try { recognition.start(); } catch (e) {}
+      }
+    }
+  }
+
+  // Toggle Auto-Mic on/off when mic button is clicked
+  micBtn.addEventListener('click', () => {
+    autoMicActive = !autoMicActive;
+    if (autoMicActive) {
+      appendLog('🎙️ Auto-Mic activated: listening continuously.', 'voice');
+      startListeningSafely();
+    } else {
+      if (recognition && isRecording) {
+        recognition.stop();
+      }
+      appendLog('Auto-Mic paused.', 'system');
+    }
+  });
+
+  if (autoMicBadge) {
+    autoMicBadge.addEventListener('click', () => {
+      micBtn.click();
+    });
+  }
+
+  // Initialize continuous voice loop
+  initContinuousAutoMic();
+
+  // ==========================================
+  // 3. Background Agent Always-On Connection
+  // ==========================================
+  function maintainBgAgentKeepAlive() {
+    try {
+      keepAlivePort = chrome.runtime.connect({ name: 'bg-agent-keepalive' });
+      keepAlivePort.onDisconnect.addListener(() => {
+        if (bgAgentAlwaysOn) {
+          setTimeout(maintainBgAgentKeepAlive, 1000);
+        }
+      });
+
+      // Keep service worker warm with periodic lightweight heartbeats
+      setInterval(() => {
+        try {
+          if (keepAlivePort) keepAlivePort.postMessage({ type: 'PING' });
+        } catch (e) {}
+      }, 15000);
+
+      appendLog('⚡ Background Agent active & persistent: monitoring browser events.', 'system');
+    } catch (e) {
+      console.warn('[VisionAgent:SW] Keepalive notice:', e);
+    }
+  }
+
+  maintainBgAgentKeepAlive();
+
+  // Active Tab / Page State Change Watchdog
+  chrome.runtime.onMessage.addListener((msg) => {
+    if (!msg) return;
+
+    if (msg.target === 'sidepanel' && msg.action === 'PAGE_STATE_CHANGED') {
+      appendLog(`⚡ Background Agent observed page state change (${msg.reason}): ${msg.url}`, 'action');
+      // Auto-scan and redact if agent is always on and not currently executing a step
+      if (bgAgentAlwaysOn && !isExecutingWorkflow) {
+        setTimeout(() => performScanAndRedact(), 350);
+      }
+    }
+  });
+
+  // ==========================================
+  // 4. Scan & Redact Handler (OpenCV Visual Pipeline)
+  // ==========================================
   async function performScanAndRedact() {
     scanBtn.disabled = true;
     scanBtn.innerHTML = '<span>⏳</span> Processing...';
@@ -228,7 +330,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       metricLatency.textContent = `${resp.redactionLatencyMs}ms`;
 
       // Update Token estimate
-      const estTokens = memory.estimateTokens(JSON.stringify(resp.elements.slice(0, 4)));
+      const candidateSummary = resp.elements ? resp.elements.slice(0, 4) : [];
+      const estTokens = memory.estimateTokens(JSON.stringify(candidateSummary));
       updateTokenMeter(Math.min(115, estTokens + 35));
 
       appendLog(`OpenCV Redaction Complete: ${resp.faceCount} faces blurred, ${resp.piiCount} PII areas blacked out (${resp.redactionLatencyMs}ms).`, 'privacy');
@@ -245,38 +348,39 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   scanBtn.addEventListener('click', performScanAndRedact);
 
-  // 4. Run Parallel Agents Handler
-  runAgentBtn.addEventListener('click', async () => {
+  // ==========================================
+  // 5. Autonomous Multi-Agent Execution Workflow
+  // ==========================================
+  async function runAutonomousWorkflow(goalText) {
+    if (isExecutingWorkflow) return;
+    isExecutingWorkflow = true;
     runAgentBtn.disabled = true;
     runAgentBtn.innerHTML = '<span>⏳</span> Executing...';
 
-    const goal = goalInput.value.trim() || 'Complete browser task';
+    const goal = (goalText || goalInput.value || 'Complete browser task').trim();
 
     try {
-      // Step A: Conversation Agent processes goal
+      // Step A: Conversation Agent normalizes goal
       await factory.handleUserInput(goal);
 
-      // Step B: Scan & Redact screen if not scanned yet
-      let scan = currentScanData;
-      if (!scan) {
-        scan = await performScanAndRedact();
-      }
+      // Step B: Scan & Redact screen via OpenCV
+      let scan = await performScanAndRedact();
 
       if (!scan || !scan.elements || scan.elements.length === 0) {
         appendLog('No interactive elements detected on active screen.', 'system');
-        await factory.speakProgress('complete', 'No interactive elements found on the screen.');
+        await factory.speakProgress('complete', 'No interactive elements found on screen.');
         return;
       }
 
-      // Step C: Supervisor Agent evaluates and spawns dynamic sub-agent
+      // Step C: Supervisor Agent evaluates page structure & spawns dynamic sub-agent
       appendLog('Supervisor evaluating screen structure & frame boundaries...', 'action');
       const subAgentResult = await factory.evaluateAndDispatch(scan);
 
       if (subAgentResult && subAgentResult.ok && subAgentResult.action) {
         const action = subAgentResult.action;
-        appendLog(`Sub-Agent generated tool action: ${JSON.stringify(action)}`, 'action');
+        appendLog(`Sub-Agent generated action: ${JSON.stringify(action)}`, 'action');
 
-        // Step D: Dispatch Playwright tool action to tab
+        // Step D: Dispatch Playwright tool action to active tab
         if (action.tool && action.tool !== 'done') {
           const execResp = await chrome.runtime.sendMessage({
             action: 'EXECUTE_PAGE_TOOL',
@@ -293,15 +397,20 @@ document.addEventListener('DOMContentLoaded', async () => {
           await factory.speakProgress('complete', 'Task plan completed.');
         }
 
-        // Re-scan to show updated state
+        // Re-scan to update HUD preview with latest screen state
         setTimeout(() => performScanAndRedact(), 600);
       }
     } catch (err) {
       appendLog(`Agent execution error: ${err.message}`, 'system');
     } finally {
+      isExecutingWorkflow = false;
       runAgentBtn.disabled = false;
       runAgentBtn.innerHTML = '<span>⚡</span> Run Parallel Agents';
     }
+  }
+
+  runAgentBtn.addEventListener('click', () => {
+    runAutonomousWorkflow(goalInput.value);
   });
 
   // Tab View Toggles

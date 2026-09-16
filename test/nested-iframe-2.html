@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Nested Iframe Level 2: Secure Payment Gateway</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #111827;
+      color: #f3f4f6;
+      padding: 16px;
+      margin: 0;
+    }
+    .payment-box {
+      border: 1px solid #374151;
+      padding: 16px;
+      border-radius: 8px;
+      background: #1f2937;
+    }
+    h3 {
+      margin-top: 0;
+      color: #60a5fa;
+      font-size: 14px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .badge {
+      background: #065f46;
+      color: #34d399;
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+    .form-group {
+      margin-bottom: 12px;
+    }
+    label {
+      display: block;
+      font-size: 11px;
+      color: #9ca3af;
+      margin-bottom: 4px;
+    }
+    input {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 8px 10px;
+      background: #111827;
+      border: 1px solid #4b5563;
+      border-radius: 4px;
+      color: #fff;
+      font-size: 12px;
+    }
+    .row {
+      display: flex;
+      gap: 8px;
+    }
+    button {
+      width: 100%;
+      background: #2563eb;
+      color: white;
+      border: none;
+      padding: 10px;
+      border-radius: 4px;
+      font-weight: 600;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    button:hover {
+      background: #1d4ed8;
+    }
+    .status-msg {
+      margin-top: 8px;
+      font-size: 11px;
+      color: #10b981;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="payment-box">
+    <h3>
+      <span>🔒 Embedded Payment Module</span>
+      <span class="badge">Level 2 (Deepest Frame)</span>
+    </h3>
+    <div class="form-group">
+      <label>Credit Card Number (PII Target)</label>
+      <input type="text" id="cardNumber" placeholder="4111-2222-3333-4444" value="4532-7598-1234-5678" />
+    </div>
+    <div class="row">
+      <div class="form-group" style="flex: 1;">
+        <label>Expiration</label>
+        <input type="text" id="cardExp" placeholder="MM/YY" value="12/28" />
+      </div>
+      <div class="form-group" style="flex: 1;">
+        <label>CVV (PII Target)</label>
+        <input type="password" id="cardCvv" placeholder="•••" value="892" />
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Transaction Authorization Password (PII Target)</label>
+      <input type="password" id="authPassword" placeholder="Enter bank password" value="SecretPass123!" />
+    </div>
+    <button id="payBtn" type="button">Confirm & Authorize Payment</button>
+    <div id="statusMsg" class="status-msg">✓ Payment Authorized and Submitted by Playwright Driver!</div>
+  </div>
+
+  <script>
+    document.getElementById('payBtn').addEventListener('click', () => {
+      document.getElementById('statusMsg').style.display = 'block';
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Privacy-Preserving Vision Agent</title>
+  <link rel="stylesheet" href="sidepanel.css">
+</head>
+<body>
+  <div class="agent-container">
+    <!-- Header -->
+    <header class="agent-header">
+      <div class="logo-group">
+        <div class="logo-badge">PVA</div>
+        <div>
+          <h1>Privacy Vision Agent</h1>
+          <span class="sub-status">Local OpenCV + Multi-Needle2 WASM</span>
+        </div>
+      </div>
+      <div class="privacy-badge">
+        <span class="pulse-dot"></span>
+        <span>100% Offline</span>
+      </div>
+    </header>
+
+    <!-- Voice & Prompt Input Area -->
+    <section class="card voice-card">
+      <div class="card-header">
+        <h2>Goal & Voice Control</h2>
+        <span class="badge" id="voiceStatusBadge">STT Ready</span>
+      </div>
+      <div class="voice-input-row">
+        <input 
+          type="text" 
+          id="goalInput" 
+          placeholder="Speak or type aim (e.g. 'Submit checkout form safely')..."
+          value="Redact sensitive data and complete the form"
+        />
+        <button id="micBtn" class="btn-icon" title="Toggle Voice (STT)">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+            <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
+            <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+          </svg>
+        </button>
+      </div>
+      <div class="action-btn-row">
+        <button id="scanBtn" class="btn btn-secondary">
+          <span>🔍</span> Scan & Redact
+        </button>
+        <button id="runAgentBtn" class="btn btn-primary">
+          <span>⚡</span> Run Parallel Agents
+        </button>
+      </div>
+    </section>
+
+    <!-- Token Budget & Resource Metrics HUD -->
+    <section class="card metrics-card">
+      <div class="metric-row">
+        <div class="metric-item">
+          <span class="metric-label">PII Redacted</span>
+          <span class="metric-val text-cyan" id="metricPiiCount">0</span>
+        </div>
+        <div class="metric-item">
+          <span class="metric-label">Faces Blurred</span>
+          <span class="metric-val text-emerald" id="metricFaceCount">0</span>
+        </div>
+        <div class="metric-item">
+          <span class="metric-label">Vision Latency</span>
+          <span class="metric-val text-violet" id="metricLatency">0ms</span>
+        </div>
+        <div class="metric-item">
+          <span class="metric-label">RAM (Weights)</span>
+          <span class="metric-val text-amber">14MB</span>
+        </div>
+      </div>
+
+      <!-- 256 Token Sliding Window Gauge -->
+      <div class="token-meter-container">
+        <div class="token-meter-header">
+          <span>Needle2 Sliding Window Budget</span>
+          <span id="tokenCountLabel">0 / 256 tokens</span>
+        </div>
+        <div class="token-bar-track">
+          <div class="token-bar-fill" id="tokenBarFill" style="width: 25%;"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Dynamic Multi-Agent Hierarchy Monitor -->
+    <section class="card">
+      <div class="card-header">
+        <h2>Parallel Agent Fleet</h2>
+        <span class="badge badge-accent" id="activeAgentBadge">3 Core Agents</span>
+      </div>
+      <div class="agent-tree" id="agentTreeContainer">
+        <div class="agent-node core-node">
+          <div class="agent-node-left">
+            <span class="agent-status-dot dot-green"></span>
+            <div>
+              <div class="agent-name">Conversation Agent</div>
+              <div class="agent-role">Voice IO & Goal Normalization (No DOM)</div>
+            </div>
+          </div>
+          <span class="agent-tok">42 tok</span>
+        </div>
+
+        <div class="agent-node core-node">
+          <div class="agent-node-left">
+            <span class="agent-status-dot dot-green"></span>
+            <div>
+              <div class="agent-name">Response Agent</div>
+              <div class="agent-role">Speech Synthesis (TTS Progress Engine)</div>
+            </div>
+          </div>
+          <span class="agent-tok">35 tok</span>
+        </div>
+
+        <div class="agent-node core-node">
+          <div class="agent-node-left">
+            <span class="agent-status-dot dot-cyan"></span>
+            <div>
+              <div class="agent-name">Browser Supervisor</div>
+              <div class="agent-role">Workflow Planner & Sub-Agent Spawner</div>
+            </div>
+          </div>
+          <span class="agent-tok">78 tok</span>
+        </div>
+
+        <!-- Dynamic Sub-Agents will be appended here -->
+        <div id="dynamicSubAgentsArea"></div>
+      </div>
+    </section>
+
+    <!-- Visual Redaction Side-by-Side Feed -->
+    <section class="card visual-card">
+      <div class="card-header">
+        <h2>Screen Redaction Inspector</h2>
+        <div class="tab-pills">
+          <button class="pill active" id="tabRedactedBtn">Redacted (Agent View)</button>
+          <button class="pill" id="tabRawBtn">Raw (Local Client)</button>
+        </div>
+      </div>
+      <div class="canvas-preview-container">
+        <img id="screenPreviewImg" alt="Visual Screen Feed" class="preview-img" src="" style="display:none;" />
+        <div id="previewPlaceholder" class="preview-placeholder">
+          <p>Click "Scan & Redact" to capture screen and apply OpenCV blurring.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Action & Audio Logs -->
+    <section class="card log-card">
+      <div class="card-header">
+        <h2>Execution & Audio Trace</h2>
+        <button class="btn-text" id="clearLogBtn">Clear</button>
+      </div>
+      <div class="log-console" id="logConsole">
+        <div class="log-entry log-system">System initialized. Needle2 weights verified in browser memory.</div>
+      </div>
+    </section>
+  </div>
+
+  <!-- Orchestration & Script dependencies -->
+  <script src="../orchestrator/needle_pool.js"></script>
+  <script src="../orchestrator/memory_layer.js"></script>
+  <script src="../orchestrator/event_bus.js"></script>
+  <script src="../orchestrator/agent_factory.js"></script>
+  <script src="sidepanel.js"></script>
+</body>
+</html>

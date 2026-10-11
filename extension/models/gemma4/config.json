@@ -1,0 +1,14 @@
+﻿{
+    "num_hidden_layers":  18,
+    "hidden_size":  2048,
+    "model_type":  "gemma4",
+    "architectures":  [
+                          "Gemma4ForCausalLM"
+                      ],
+    "quantization_config":  {
+                                "load_in_4bit":  true,
+                                "quant_method":  "bitsandbytes"
+                            },
+    "num_attention_heads":  8,
+    "vocab_size":  256000
+}

@@ -1,0 +1,5 @@
+﻿{
+    "add_eos_token":  false,
+    "model_type":  "gemma4",
+    "add_bos_token":  true
+}

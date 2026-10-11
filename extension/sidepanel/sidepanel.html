@@ -3,181 +3,157 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Privacy-Preserving Vision Agent</title>
+  <title>Gemma 4 Autonomous Browser Agent</title>
   <link rel="stylesheet" href="sidepanel.css">
 </head>
 <body>
   <div class="agent-container">
-    <!-- Header -->
+    <!-- Top Bar / Header -->
     <header class="agent-header">
-      <div class="logo-group">
-        <div class="logo-badge">PVA</div>
+      <div class="brand">
+        <div class="logo-icon">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+          </svg>
+        </div>
         <div>
-          <h1>Privacy Vision Agent</h1>
-          <span class="sub-status">Local OpenCV + Multi-Needle2 WASM</span>
+          <h1>Gemma 4 Agent</h1>
+          <span class="sub-caption">Autonomous Browser Controller</span>
         </div>
       </div>
-      <div class="privacy-badge">
-        <span class="pulse-dot"></span>
-        <span>100% Offline</span>
+      <div class="status-pills">
+        <div class="pill pill-offline" title="100% Offline, zero external network telemetry">
+          <span class="dot dot-green"></span>
+          <span>Offline</span>
+        </div>
+        <div class="pill pill-engine" id="enginePill" title="Inference Backend">
+          <span class="dot dot-cyan"></span>
+          <span id="engineLabel">Chrome Built-in AI</span>
+        </div>
       </div>
     </header>
 
-    <!-- Voice & Prompt Input Area -->
-    <section class="card voice-card">
+    <!-- Voice Command & Goal Section -->
+    <section class="card voice-command-card">
       <div class="card-header">
-        <h2>Goal & Voice Control</h2>
-        <span class="badge" id="voiceStatusBadge">🎙️ Auto-Mic Active</span>
+        <h2>Voice & Goal Command</h2>
+        <div class="voice-status-badge" id="voiceStatusBadge">
+          <span class="mic-wave-icon">🎙️</span>
+          <span id="voiceStatusText">Voice Ready</span>
+        </div>
       </div>
-      <div class="voice-input-row">
-        <input 
-          type="text" 
-          id="goalInput" 
-          placeholder="Speak or type aim (e.g. 'Submit checkout form safely')..."
-          value="Redact sensitive data and complete the form"
-        />
-        <button id="micBtn" class="btn-icon recording" title="Auto-Mic Active (Listening continuously)">
-          <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+
+      <!-- Main Input Box with Integrated Push-to-Talk Mic -->
+      <div class="input-orb-wrapper">
+        <div class="input-container">
+          <textarea 
+            id="goalInput" 
+            rows="2"
+            placeholder="Speak or type a command... (e.g. 'Search for quantum computing on Wikipedia and open the first article')"
+          ></textarea>
+        </div>
+        <button id="micOrbBtn" class="mic-orb" title="Click to start/stop listening voice command">
+          <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
             <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
             <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
           </svg>
+          <div class="orb-pulse"></div>
         </button>
       </div>
 
-      <!-- Live Auto-Mic & BG Agent Always-On Indicators -->
-      <div class="status-indicators-row">
-        <div class="privacy-badge badge-mic-on" id="autoMicBadge" title="Continuous hands-free speech recognition">
-          <span class="pulse-dot dot-cyan"></span>
-          <span id="autoMicText">Auto-Mic: Listening</span>
-        </div>
-        <div class="privacy-badge badge-bg-on" id="bgAgentBadge" title="Background agent fleet actively monitoring and ready">
-          <span class="pulse-dot dot-green"></span>
-          <span>BG Agent: Always On</span>
-        </div>
-      </div>
-
-      <div class="action-btn-row">
-        <button id="scanBtn" class="btn btn-secondary">
-          <span>🔍</span> Scan & Redact
+      <!-- Controls: Run, Stop, Clear, Audio Toggle -->
+      <div class="command-actions">
+        <button id="runTaskBtn" class="btn btn-primary">
+          <span class="btn-icon">⚡</span> Run Task
         </button>
-        <button id="runAgentBtn" class="btn btn-primary">
-          <span>⚡</span> Run Parallel Agents
+        <button id="pauseTaskBtn" class="btn btn-secondary" disabled>
+          <span>⏸</span> Pause
+        </button>
+        <button id="stopTaskBtn" class="btn btn-danger" disabled>
+          <span>⏹</span> Stop
+        </button>
+        <button id="ttsToggleBtn" class="btn btn-ghost" title="Audio Feedback Voice Output">
+          <span id="ttsIcon">🔊</span> Audio
         </button>
       </div>
     </section>
 
-    <!-- Token Budget & Resource Metrics HUD -->
-    <section class="card metrics-card">
-      <div class="metric-row">
-        <div class="metric-item">
-          <span class="metric-label">PII Redacted</span>
-          <span class="metric-val text-cyan" id="metricPiiCount">0</span>
-        </div>
-        <div class="metric-item">
-          <span class="metric-label">Faces Blurred</span>
-          <span class="metric-val text-emerald" id="metricFaceCount">0</span>
-        </div>
-        <div class="metric-item">
-          <span class="metric-label">Vision Latency</span>
-          <span class="metric-val text-violet" id="metricLatency">0ms</span>
-        </div>
-        <div class="metric-item">
-          <span class="metric-label">RAM (Weights)</span>
-          <span class="metric-val text-amber">14MB</span>
-        </div>
+    <!-- Active Webpage State & Element Badges HUD -->
+    <section class="card hud-card">
+      <div class="hud-header">
+        <span class="hud-title">Target Webpage</span>
+        <button id="refreshPageBtn" class="btn-text">🔄 Re-scan Page</button>
       </div>
-
-      <!-- 256 Token Sliding Window Gauge -->
-      <div class="token-meter-container">
-        <div class="token-meter-header">
-          <span>Needle2 Sliding Window Budget</span>
-          <span id="tokenCountLabel">0 / 256 tokens</span>
+      <div class="page-meta">
+        <div class="page-title" id="pageTitleLabel">Checking active tab...</div>
+        <div class="page-url" id="pageUrlLabel">about:blank</div>
+      </div>
+      <div class="hud-stats">
+        <div class="stat-box">
+          <span class="stat-number text-cyan" id="elementCountLabel">0</span>
+          <span class="stat-name">Interactive Badges</span>
         </div>
-        <div class="token-bar-track">
-          <div class="token-bar-fill" id="tokenBarFill" style="width: 25%;"></div>
+        <div class="stat-box">
+          <span class="stat-number text-emerald" id="stepCountLabel">0 / 10</span>
+          <span class="stat-name">Steps</span>
+        </div>
+        <div class="stat-box">
+          <span class="stat-number text-indigo" id="latencyLabel">0ms</span>
+          <span class="stat-name">Gemma Latency</span>
         </div>
       </div>
     </section>
 
-    <!-- Dynamic Multi-Agent Hierarchy Monitor -->
-    <section class="card">
+    <!-- Agent Activity & Audio Feedback Stream -->
+    <section class="card stream-card">
       <div class="card-header">
-        <h2>Parallel Agent Fleet</h2>
-        <span class="badge badge-accent" id="activeAgentBadge">3 Core Agents</span>
+        <h2>Live Execution & Spoken Audio</h2>
+        <button id="clearStreamBtn" class="btn-text">Clear</button>
       </div>
-      <div class="agent-tree" id="agentTreeContainer">
-        <div class="agent-node core-node">
-          <div class="agent-node-left">
-            <span class="agent-status-dot dot-green"></span>
-            <div>
-              <div class="agent-name">Conversation Agent</div>
-              <div class="agent-role">Voice IO & Goal Normalization (No DOM)</div>
-            </div>
+      <div class="activity-stream" id="activityStream">
+        <div class="stream-item item-system">
+          <div class="stream-icon">✨</div>
+          <div class="stream-content">
+            <div class="stream-title">Gemma 4 System Ready</div>
+            <div class="stream-desc">Voice commands and browser control active. Give a command above.</div>
           </div>
-          <span class="agent-tok">42 tok</span>
-        </div>
-
-        <div class="agent-node core-node">
-          <div class="agent-node-left">
-            <span class="agent-status-dot dot-green"></span>
-            <div>
-              <div class="agent-name">Response Agent</div>
-              <div class="agent-role">Speech Synthesis (TTS Progress Engine)</div>
-            </div>
-          </div>
-          <span class="agent-tok">35 tok</span>
-        </div>
-
-        <div class="agent-node core-node">
-          <div class="agent-node-left">
-            <span class="agent-status-dot dot-cyan"></span>
-            <div>
-              <div class="agent-name">Browser Supervisor</div>
-              <div class="agent-role">Workflow Planner & Sub-Agent Spawner</div>
-            </div>
-          </div>
-          <span class="agent-tok">78 tok</span>
-        </div>
-
-        <!-- Dynamic Sub-Agents will be appended here -->
-        <div id="dynamicSubAgentsArea"></div>
-      </div>
-    </section>
-
-    <!-- Visual Redaction Side-by-Side Feed -->
-    <section class="card visual-card">
-      <div class="card-header">
-        <h2>Screen Redaction Inspector</h2>
-        <div class="tab-pills">
-          <button class="pill active" id="tabRedactedBtn">Redacted (Agent View)</button>
-          <button class="pill" id="tabRawBtn">Raw (Local Client)</button>
-        </div>
-      </div>
-      <div class="canvas-preview-container">
-        <img id="screenPreviewImg" alt="Visual Screen Feed" class="preview-img" src="" style="display:none;" />
-        <div id="previewPlaceholder" class="preview-placeholder">
-          <p>Click "Scan & Redact" to capture screen and apply OpenCV blurring.</p>
         </div>
       </div>
     </section>
 
-    <!-- Action & Audio Logs -->
-    <section class="card log-card">
-      <div class="card-header">
-        <h2>Execution & Audio Trace</h2>
-        <button class="btn-text" id="clearLogBtn">Clear</button>
+    <!-- Engine Settings Collapsible Drawer -->
+    <details class="card settings-card">
+      <summary class="settings-summary">
+        <span>⚙️ Inference & Voice Settings</span>
+      </summary>
+      <div class="settings-body">
+        <div class="setting-group">
+          <label for="backendSelect">Gemma 4 Runtime Mode:</label>
+          <select id="backendSelect">
+            <option value="chrome_ai">Chrome Built-in AI (window.ai - Zero VRAM Overhead)</option>
+            <option value="hybrid">Auto Hybrid (Embedded Engine / Fallback)</option>
+            <option value="webgpu">In-Browser WebGPU (Local Model Files)</option>
+            <option value="ollama">Localhost Ollama (gemma-4:e2b)</option>
+          </select>
+        </div>
+        <div class="setting-group">
+          <label for="ollamaUrl">Localhost Ollama Endpoint:</label>
+          <input type="text" id="ollamaUrl" value="http://localhost:11434" />
+        </div>
+        <div class="setting-group">
+          <label for="voiceRateSlider">Voice Feedback Speed:</label>
+          <input type="range" id="voiceRateSlider" min="0.8" max="1.4" step="0.05" value="1.05" />
+        </div>
       </div>
-      <div class="log-console" id="logConsole">
-        <div class="log-entry log-system">System initialized. Needle2 weights verified in browser memory.</div>
-      </div>
-    </section>
+    </details>
   </div>
 
-  <!-- Orchestration & Script dependencies -->
-  <script src="../orchestrator/needle_pool.js"></script>
-  <script src="../orchestrator/memory_layer.js"></script>
+  <!-- Runtime Scripts -->
   <script src="../orchestrator/event_bus.js"></script>
-  <script src="../orchestrator/agent_factory.js"></script>
+  <script src="../orchestrator/memory_layer.js"></script>
+  <script src="../orchestrator/gemma4_runner.js"></script>
+  <script src="voice_controller.js"></script>
+  <script src="../orchestrator/agent_controller.js"></script>
   <script src="sidepanel.js"></script>
 </body>
 </html>

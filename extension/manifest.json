@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Privacy-Preserving Vision Agent",
-  "version": "1.0.0",
-  "description": "Local OpenCV.js visual PII redactor with parallel Needle2 WASM agents, Playwright driver, multi-layer iframe access, and voice STT/TTS.",
+  "name": "Gemma 4 Autonomous Browser Agent",
+  "version": "2.0.0",
+  "description": "100% offline browser automation agent powered by Gemma 4. Controls the browser and completes tasks via voice commands with audio feedback.",
   "permissions": [
     "tabs",
     "activeTab",
@@ -19,7 +19,7 @@
     "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
   },
   "action": {
-    "default_title": "Open Privacy Vision Agent"
+    "default_title": "Open Gemma 4 Agent"
   },
   "background": {
     "service_worker": "background/service-worker.js"
@@ -42,9 +42,10 @@
   "web_accessible_resources": [
     {
       "resources": [
-        "weights/*",
+        "models/*",
         "orchestrator/*",
-        "sidepanel/*"
+        "sidepanel/*",
+        "content/*"
       ],
       "matches": ["<all_urls>"]
     }

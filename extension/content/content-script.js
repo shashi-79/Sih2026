@@ -1,34 +1,78 @@
 /**
- * Content Script: Micro-Element Slicer, Multi-Layer Iframe Traverser,
- * and PII Detection Scanner.
+ * Content Script: Gemma 4 Autonomous Browser Controller
+ * Injects Set-of-Marks (SoM) badges onto interactive elements, extracts clean DOM context,
+ * and executes Playwright-level actions (click, fill, press, scroll, navigate, extract).
  */
 
 (function () {
   const isTopFrame = window === window.top;
-  const frameIdentifier = isTopFrame ? 'top' : `frame_${Math.random().toString(36).substring(2, 8)}`;
-  
-  let elementRegistry = new Map(); // id -> HTMLElement
-  let elementCounter = 0;
+  const frameIdentifier = isTopFrame ? 'top' : (window.name || `frame_${Math.random().toString(36).substring(2, 7)}`);
 
-  console.log(`[VisionAgent:ContentScript] Initialized in ${isTopFrame ? 'Top-Level Frame' : 'Sub-Frame (' + window.location.href + ')'}`);
+  let elementRegistry = new Map(); // badgeIndex -> HTMLElement
+  let badgeContainer = null;
+  let activeBadges = [];
 
-  // Regex patterns for sensitive DOM PII detection
-  const PII_PATTERNS = {
-    creditCard: /\b(?:\d[ -]*?){13,16}\b/,
-    email: /[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+/,
-    phone: /\b(?:\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b/,
-    ssn: /\b\d{3}-\d{2}-\d{4}\b/
-  };
+  console.log(`[Gemma4:ContentScript] Initialized in ${isTopFrame ? 'Top-Level Frame' : 'Sub-Frame (' + window.location.href + ')'}`);
 
   /**
-   * Scans visible interactive elements and compresses them into micro-tuples
-   * for the Needle2 256-token sliding window
+   * Ensures the badge container overlay exists in DOM
    */
-  function scanInteractiveElements() {
-    elementRegistry.clear();
-    elementCounter = 0;
+  function ensureBadgeContainer() {
+    if (!badgeContainer || !document.body.contains(badgeContainer)) {
+      badgeContainer = document.createElement('div');
+      badgeContainer.id = '__gemma_agent_badges__';
+      badgeContainer.style.cssText = `
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+        z-index: 2147483647;
+      `;
+      document.body.appendChild(badgeContainer);
+    }
+    return badgeContainer;
+  }
 
-    const interactiveSelectors = [
+  /**
+   * Removes all visible badges from the page
+   */
+  function clearBadges() {
+    if (badgeContainer && badgeContainer.parentNode) {
+      badgeContainer.innerHTML = '';
+    }
+    activeBadges = [];
+  }
+
+  /**
+   * Checks if an element is currently visible in viewport
+   */
+  function isElementVisible(el, doc = document) {
+    if (!el) return false;
+    const win = doc.defaultView || window;
+    const style = win.getComputedStyle(el);
+    if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') {
+      return false;
+    }
+    const rect = el.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return false;
+    return (
+      rect.bottom >= 0 &&
+      rect.right >= 0 &&
+      rect.top <= (win.innerHeight || doc.documentElement.clientHeight) &&
+      rect.left <= (win.innerWidth || doc.documentElement.clientWidth)
+    );
+  }
+
+  /**
+   * Scans interactive elements, assigns Set-of-Marks badges, and builds structured element map for Gemma 4
+   */
+  function scanInteractiveElements(options = { showBadges: true }) {
+    clearBadges();
+    elementRegistry.clear();
+
+    const selectors = [
       'button:not([disabled])',
       'input:not([type="hidden"]):not([disabled])',
       'textarea:not([disabled])',
@@ -36,267 +80,221 @@
       'a[href]',
       '[role="button"]',
       '[role="link"]',
+      '[role="searchbox"]',
       '[role="checkbox"]',
+      '[role="tab"]',
       '[tabindex="0"]'
     ].join(', ');
 
-    const nodes = Array.from(document.querySelectorAll(interactiveSelectors));
-    const microElements = [];
+    let nodes = [];
+    try {
+      nodes = Array.from(document.querySelectorAll(selectors));
+    } catch (e) {
+      return [];
+    }
+
+    const container = options.showBadges ? ensureBadgeContainer() : null;
+    const elements = [];
+    let badgeIndex = 1;
 
     for (const node of nodes) {
       if (!isElementVisible(node)) continue;
 
-      elementCounter++;
-      const assignedId = `${frameIdentifier}_${elementCounter}`;
-      node.setAttribute('data-sih-id', assignedId);
-      elementRegistry.set(assignedId, node);
-
       const rect = node.getBoundingClientRect();
       const tagName = node.tagName.toLowerCase();
       const type = node.getAttribute('type') || '';
-      const text = (node.innerText || node.getAttribute('aria-label') || node.getAttribute('placeholder') || node.value || '').trim();
-      const truncatedText = text.substring(0, 24);
+      const text = (node.innerText || node.getAttribute('aria-label') || node.getAttribute('placeholder') || node.getAttribute('title') || node.value || '').trim();
+      const cleanText = text.replace(/\s+/g, ' ').substring(0, 50);
 
-      // Micro-tuple: compact representation to save prompt tokens
-      microElements.push({
-        id: assignedId,
+      const elementId = `agent_${badgeIndex}`;
+      node.setAttribute('data-gemma-badge', badgeIndex);
+      node.setAttribute('data-gemma-id', elementId);
+      elementRegistry.set(badgeIndex, node);
+      elementRegistry.set(badgeIndex.toString(), node);
+      elementRegistry.set(elementId, node);
+
+      // Render Set-of-Marks visual badge overlay
+      if (options.showBadges && container) {
+        const badge = document.createElement('div');
+        badge.className = '__gemma_badge_item__';
+        const scrollX = window.scrollX || window.pageXOffset;
+        const scrollY = window.scrollY || window.pageYOffset;
+
+        badge.style.cssText = `
+          position: absolute;
+          left: ${rect.left + scrollX}px;
+          top: ${Math.max(0, rect.top + scrollY - 14)}px;
+          background: linear-gradient(135deg, #4f46e5, #06b6d4);
+          color: #ffffff;
+          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+          font-size: 11px;
+          font-weight: 700;
+          line-height: 1;
+          padding: 2px 5px;
+          border-radius: 4px;
+          border: 1px solid rgba(255, 255, 255, 0.8);
+          box-shadow: 0 2px 5px rgba(0,0,0,0.4);
+          pointer-events: none;
+          z-index: 2147483647;
+          opacity: 0.95;
+        `;
+        badge.textContent = `[${badgeIndex}]`;
+        container.appendChild(badge);
+        activeBadges.push(badge);
+      }
+
+      elements.push({
+        badge: badgeIndex,
+        id: elementId,
         tag: tagName,
         type: type,
-        text: truncatedText,
+        text: cleanText,
+        placeholder: node.getAttribute('placeholder') || '',
+        role: node.getAttribute('role') || tagName,
+        href: node.getAttribute('href') || '',
+        value: (node.value || '').substring(0, 30),
         rect: {
           x: Math.round(rect.x),
           y: Math.round(rect.y),
           w: Math.round(rect.width),
           h: Math.round(rect.height)
-        },
-        isIframe: !isTopFrame
+        }
       });
 
-      if (microElements.length >= 12) break; // Limit candidate pool for sliding window
+      badgeIndex++;
+      if (badgeIndex > 40) break; // Limit to top 40 most relevant elements in viewport
     }
 
-    return microElements;
+    return elements;
   }
 
   /**
-   * Scans for sensitive PII in DOM: password inputs, credit cards, emails, tokens
-   * Returns exact pixel bounding rectangles for the OpenCV visual redactor
+   * Resolves target element from badge number, element ID, or CSS selector
    */
-  function scanPIIBoundingBoxes() {
-    const sensitiveRects = [];
+  function resolveTarget(targetIdentifier) {
+    if (!targetIdentifier) return null;
 
-    // 1. Structural password inputs
-    const passwordInputs = document.querySelectorAll('input[type="password"]');
-    passwordInputs.forEach(el => {
-      if (isElementVisible(el)) {
-        const r = el.getBoundingClientRect();
-        sensitiveRects.push({
-          type: 'password_field',
-          rect: { x: r.x, y: r.y, w: r.width, h: r.height }
-        });
-      }
-    });
-
-    // 2. Scan text nodes & values against PII regexes
-    const allInputs = document.querySelectorAll('input:not([type="password"]), textarea');
-    allInputs.forEach(input => {
-      const val = input.value || '';
-      const nameAttr = (input.name || input.id || input.placeholder || '').toLowerCase();
-      
-      const isSensitiveName = /card|cvv|cvc|ssn|pass|token|secret|pin|auth/.test(nameAttr);
-      const isSensitiveValue = PII_PATTERNS.creditCard.test(val) || PII_PATTERNS.email.test(val) || PII_PATTERNS.ssn.test(val);
-
-      if (isSensitiveName || isSensitiveValue) {
-        if (isElementVisible(input)) {
-          const r = input.getBoundingClientRect();
-          sensitiveRects.push({
-            type: 'pii_input',
-            rect: { x: r.x, y: r.y, w: r.width, h: r.height }
-          });
-        }
-      }
-    });
-
-    // 3. Scan rendered text elements for sensitive labels
-    const textElements = document.querySelectorAll('p, span, div, h1, h2, h3, td, th');
-    textElements.forEach(el => {
-      if (el.children.length === 0 && el.innerText) {
-        const txt = el.innerText.trim();
-        if (PII_PATTERNS.creditCard.test(txt) || PII_PATTERNS.ssn.test(txt)) {
-          if (isElementVisible(el)) {
-            const r = el.getBoundingClientRect();
-            sensitiveRects.push({
-              type: 'pii_text',
-              rect: { x: r.x, y: r.y, w: r.width, h: r.height }
-            });
-          }
-        }
-      }
-    });
-
-    return sensitiveRects;
-  }
-
-  /**
-   * Scans for visual face / avatar regions in DOM: profile images, canvas avatars, user badges
-   */
-  function scanVisualFaceRegions() {
-    const faceRects = [];
-    const faceSelectors = [
-      'canvas#faceAvatar',
-      'canvas[data-face]',
-      '[id*="avatar"]',
-      '[class*="avatar"]',
-      '[id*="face"]',
-      '[class*="face"]',
-      'img[src*="avatar"]',
-      'img[src*="profile"]',
-      'img[alt*="avatar"]',
-      'img[alt*="profile"]',
-      '.user-avatar',
-      '.profile-pic'
-    ].join(', ');
-
-    const nodes = document.querySelectorAll(faceSelectors);
-    nodes.forEach(el => {
-      if (isElementVisible(el)) {
-        const r = el.getBoundingClientRect();
-        faceRects.push({
-          x: Math.round(r.x),
-          y: Math.round(r.y),
-          w: Math.round(r.width),
-          h: Math.round(r.height)
-        });
-      }
-    });
-
-    return faceRects;
-  }
-
-  function isElementVisible(el) {
-    if (!el) return false;
-    const style = window.getComputedStyle(el);
-    if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') {
-      return false;
+    // 1. Direct registry lookup by badge number or ID
+    if (elementRegistry.has(targetIdentifier)) {
+      return elementRegistry.get(targetIdentifier);
     }
-    const rect = el.getBoundingClientRect();
-    if (rect.width <= 0 || rect.height <= 0) return false;
-    // Check within viewport
-    return (
-      rect.bottom >= 0 &&
-      rect.right >= 0 &&
-      rect.top <= (window.innerHeight || document.documentElement.clientHeight) &&
-      rect.left <= (window.innerWidth || document.documentElement.clientWidth)
-    );
+
+    // 2. Lookup by numeric badge attribute
+    const num = parseInt(targetIdentifier, 10);
+    if (!isNaN(num)) {
+      const byBadgeAttr = document.querySelector(`[data-gemma-badge="${num}"]`);
+      if (byBadgeAttr) return byBadgeAttr;
+    }
+
+    // 3. Lookup by data-gemma-id
+    const byId = document.querySelector(`[data-gemma-id="${targetIdentifier}"]`);
+    if (byId) return byId;
+
+    // 4. CSS selector fallback
+    try {
+      const bySelector = document.querySelector(targetIdentifier);
+      if (bySelector) return bySelector;
+    } catch (_) {}
+
+    // 5. Semantic text search fallback (fuzzy match text or aria-label)
+    if (typeof targetIdentifier === 'string' && targetIdentifier.length > 2) {
+      const allButtons = Array.from(document.querySelectorAll('button, a, input[type="submit"], [role="button"]'));
+      const lower = targetIdentifier.toLowerCase();
+      for (const btn of allButtons) {
+        const txt = (btn.innerText || btn.getAttribute('aria-label') || '').toLowerCase();
+        if (txt.includes(lower)) return btn;
+      }
+    }
+
+    return null;
   }
 
   /**
-   * Listen for commands dispatched from Background Service Worker
+   * Message Router for Extension Orchestrator
    */
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (!message || !message.action) return false;
-    if (
-      message.action !== 'GENERATE_FALLBACK_SCREENSHOT' &&
-      message.action !== 'SCAN_VIEWPORT' &&
-      message.action !== 'EXECUTE_TOOL'
-    ) {
-      return false;
-    }
 
     (async () => {
       try {
         switch (message.action) {
-          case 'GENERATE_FALLBACK_SCREENSHOT': {
-            const canvas = document.createElement('canvas');
-            canvas.width = window.innerWidth || 1280;
-            canvas.height = window.innerHeight || 800;
-            const ctx = canvas.getContext('2d');
+          case 'SCAN_PAGE_STATE': {
+            const elements = scanInteractiveElements({ showBadges: message.showBadges !== false });
+            const pageTitle = document.title || '';
+            const pageUrl = window.location.href;
 
-            // Draw base background
-            ctx.fillStyle = '#0b0f19';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-            // Draw all visible block elements
-            const allNodes = document.querySelectorAll('div, section, header, button, input, p, h1, h2, h3, canvas');
-            for (const el of allNodes) {
-              if (el === canvas) continue;
-              const r = el.getBoundingClientRect();
-              if (r.width > 0 && r.height > 0 && r.bottom >= 0 && r.top <= canvas.height) {
-                const style = window.getComputedStyle(el);
-                if (style.backgroundColor && style.backgroundColor !== 'rgba(0, 0, 0, 0)') {
-                  ctx.fillStyle = style.backgroundColor;
-                  ctx.fillRect(r.x, r.y, r.width, r.height);
-                }
-                // If it's a canvas (e.g. face avatar), draw its content
-                if (el.tagName.toLowerCase() === 'canvas') {
-                  try { ctx.drawImage(el, r.x, r.y, r.width, r.height); } catch (e) {}
-                }
-                // If it has text, render text
-                if (el.children.length === 0 && (el.innerText || el.value)) {
-                  ctx.fillStyle = style.color || '#e2e8f0';
-                  ctx.font = `${style.fontSize || '12px'} ${style.fontFamily || 'sans-serif'}`;
-                  const txt = (el.value || el.innerText || '').substring(0, 40);
-                  ctx.fillText(txt, r.x + 4, r.y + r.height / 2 + 4);
-                }
-              }
-            }
-
-            const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
-            sendResponse({ ok: true, dataUrl });
+            sendResponse({
+              ok: true,
+              frameId: frameIdentifier,
+              isTopFrame,
+              title: pageTitle,
+              url: pageUrl,
+              elementCount: elements.length,
+              elements
+            });
             break;
           }
 
-          case 'SCAN_VIEWPORT': {
-            const elements = scanInteractiveElements();
-            const pii = scanPIIBoundingBoxes();
-            const faces = scanVisualFaceRegions();
+          case 'CLEAR_BADGES': {
+            clearBadges();
+            sendResponse({ ok: true });
+            break;
+          }
+
+          case 'EXTRACT_PAGE_CONTENT': {
+            const mainText = (document.body.innerText || '').substring(0, 3000);
             sendResponse({
               ok: true,
-              frame: frameIdentifier,
-              isTop: isTopFrame,
-              elements,
-              piiRects: pii,
-              faceRects: faces,
-              url: window.location.href
+              title: document.title,
+              url: window.location.href,
+              text: mainText
             });
             break;
           }
 
           case 'EXECUTE_TOOL': {
-            const { tool, id, value, key, direction } = message;
-            const target = elementRegistry.get(id) || document.querySelector(`[data-sih-id="${id}"]`);
+            const { tool, target, value, key, direction, url } = message;
+            const el = resolveTarget(target);
 
-            if (!target && (tool === 'click' || tool === 'fill')) {
-              // Might be in another frame; ignore if not our target
-              sendResponse({ ok: false, reason: 'Target not in this frame' });
+            if (!el && (tool === 'click' || tool === 'fill' || tool === 'hover')) {
+              sendResponse({ ok: false, error: `Target element '${target}' not found on page` });
               return;
             }
 
             let result = null;
             if (tool === 'click') {
-              result = await window.PlaywrightDriver.click(target);
+              result = await window.PlaywrightDriver.click(el);
             } else if (tool === 'fill') {
-              result = await window.PlaywrightDriver.fill(target, value || '');
+              result = await window.PlaywrightDriver.fill(el, value || '');
             } else if (tool === 'press') {
-              result = await window.PlaywrightDriver.press(target, key || 'Enter');
+              result = await window.PlaywrightDriver.press(el, key || 'Enter');
             } else if (tool === 'scroll') {
-              result = await window.PlaywrightDriver.scroll(direction || 'down');
+              result = await window.PlaywrightDriver.scroll(direction || 'down', 400);
+            } else if (tool === 'navigate') {
+              if (url) {
+                window.location.href = url;
+                result = { ok: true, navigatedTo: url };
+              }
+            } else if (tool === 'extract_text') {
+              const extracted = el ? (el.innerText || el.value) : (document.body.innerText || '').substring(0, 1500);
+              result = { ok: true, text: extracted };
             } else {
               throw new Error(`Unsupported tool: ${tool}`);
             }
 
-            sendResponse({ ok: true, tool, result });
+            sendResponse({ ok: true, tool, target, result });
             break;
           }
 
           default:
-            sendResponse({ ok: false, reason: 'Unknown action' });
+            sendResponse({ ok: false, error: 'Unknown action' });
         }
       } catch (err) {
+        console.error('[Gemma4:ContentScript] Tool execution error:', err);
         sendResponse({ ok: false, error: err.message });
       }
     })();
 
-    return true; // Keep async channel open
+    return true; // Keep message channel open for async response
   });
 })();

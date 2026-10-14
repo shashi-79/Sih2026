@@ -1,6 +1,6 @@
 ﻿{
     "architecture":  "Gemma4ForCausalLM",
-    "downloadTimestamp":  "2026-10-11T09:15:13.6338910+05:30",
+    "downloadTimestamp":  "2026-10-12T00:42:23.8696745+05:30",
     "quantization":  "int4_webgpu",
     "modelId":  "gemma-4-E2B-it",
     "contextWindow":  131072,

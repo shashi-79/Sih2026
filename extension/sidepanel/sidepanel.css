@@ -31,7 +31,6 @@ body {
   line-height: 1.45;
   padding: 12px;
   overflow-y: auto;
-  user-select: none;
 }
 
 .agent-container {
@@ -115,8 +114,15 @@ body {
   border-radius: 50%;
 }
 
-.dot-green { background: var(--emerald); box-shadow: 0 0 6px var(--emerald); }
-.dot-cyan { background: var(--cyan); box-shadow: 0 0 6px var(--cyan); }
+.dot-green {
+  background: var(--emerald);
+  box-shadow: 0 0 6px var(--emerald);
+}
+
+.dot-cyan {
+  background: var(--cyan);
+  box-shadow: 0 0 6px var(--cyan);
+}
 
 /* Common Card Styling */
 .card {
@@ -237,8 +243,15 @@ textarea#goalInput:focus {
 }
 
 @keyframes orbRipple {
-  0% { transform: scale(0.9); opacity: 0.8; }
-  100% { transform: scale(1.5); opacity: 0; }
+  0% {
+    transform: scale(0.9);
+    opacity: 0.8;
+  }
+
+  100% {
+    transform: scale(1.5);
+    opacity: 0;
+  }
 }
 
 /* Command Action Buttons */
@@ -329,6 +342,12 @@ textarea#goalInput:focus {
   margin-bottom: 6px;
 }
 
+.hud-btn-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .hud-title {
   font-size: 11px;
   font-weight: 700;
@@ -386,9 +405,17 @@ textarea#goalInput:focus {
   color: var(--text-muted);
 }
 
-.text-cyan { color: var(--cyan); }
-.text-emerald { color: var(--emerald); }
-.text-indigo { color: var(--indigo); }
+.text-cyan {
+  color: var(--cyan);
+}
+
+.text-emerald {
+  color: var(--emerald);
+}
+
+.text-indigo {
+  color: var(--indigo);
+}
 
 /* Activity Stream Card */
 .activity-stream {
@@ -487,7 +514,8 @@ textarea#goalInput:focus {
 }
 
 .setting-group select,
-.setting-group input[type="text"] {
+.setting-group input[type="text"],
+.setting-group input[type="password"] {
   background: rgba(0, 0, 0, 0.3);
   border: 1px solid var(--border-color);
   color: var(--text-primary);
@@ -499,4 +527,53 @@ textarea#goalInput:focus {
 
 .setting-group input[type="range"] {
   accent-color: var(--cyan);
+}
+
+/* Milestone Checklist Card */
+.milestone-card {
+  margin-bottom: 12px;
+}
+
+.milestone-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.milestone-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--border-color);
+  font-size: 11.5px;
+  transition: all 0.2s;
+}
+
+.milestone-item.in_progress {
+  border-color: var(--cyan);
+  background: rgba(6, 182, 212, 0.1);
+}
+
+.milestone-item.completed {
+  border-color: var(--emerald);
+  background: rgba(16, 185, 129, 0.08);
+  opacity: 0.85;
+}
+
+.milestone-item .m-icon {
+  font-size: 13px;
+}
+
+.milestone-item .m-title {
+  flex: 1;
+  color: var(--text-primary);
+}
+
+.milestone-item.completed .m-title {
+  text-decoration: line-through;
+  color: var(--text-secondary);
 }

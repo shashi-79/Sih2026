@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Gemma 4 Autonomous Browser Agent",
-  "version": "2.0.0",
-  "description": "100% offline browser automation agent powered by Gemma 4. Controls the browser and completes tasks via voice commands with audio feedback.",
+  "version": "2.1.0",
+  "description": "Full browser control autonomous agent powered by Gemma 4. Controls tabs, navigation, clicks, inputs, and forms via voice commands with audio feedback.",
   "permissions": [
     "tabs",
     "activeTab",
@@ -10,11 +10,26 @@
     "offscreen",
     "storage",
     "webNavigation",
-    "sidePanel"
+    "sidePanel",
+    "downloads",
+    "bookmarks",
+    "declarativeNetRequest",
+    "debugger"
   ],
   "host_permissions": [
-    "<all_urls>"
+    "<all_urls>",
+    "http://127.0.0.1/*",
+    "http://localhost/*"
   ],
+  "declarative_net_request": {
+    "rule_resources": [
+      {
+        "id": "ruleset_1",
+        "enabled": true,
+        "path": "rules.json"
+      }
+    ]
+  },
   "content_security_policy": {
     "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
   },

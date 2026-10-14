@@ -106,6 +106,36 @@ class VoiceController {
   }
 
   /**
+   * Intelligently selects the most natural browser voice matching language and tone
+   */
+  findBestVoice(text = '') {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return null;
+    const voices = window.speechSynthesis.getVoices() || [];
+    if (voices.length === 0) return null;
+
+    // Detect if text is Hindi or Hinglish
+    const isHindiOrHinglish = /[^\u0000-\u007F]|\b(haan|main|aapke|aapka|liye|khol|karta|hoon|raha|rahi|dhoondh|dekhiye|chaliye|karo|batao|kholte|gayi|hai|hain)\b/i.test(text);
+
+    if (isHindiOrHinglish) {
+      // Prioritize natural Hindi or Indian English voices for authentic phonetics
+      const hindiVoice = voices.find(v => /hi[-_]in/i.test(v.lang) || /hindi|हिन्दी/i.test(v.name));
+      if (hindiVoice) return hindiVoice;
+
+      const indianVoice = voices.find(v => /en[-_]in/i.test(v.lang) || /india/i.test(v.name));
+      if (indianVoice) return indianVoice;
+    }
+
+    // Natural English voices: prioritize Google / Microsoft Natural / Neural
+    const naturalVoice = voices.find(v => /google.*english|natural|neural/i.test(v.name));
+    if (naturalVoice) return naturalVoice;
+
+    const enUsVoice = voices.find(v => /en[-_]us/i.test(v.lang) && !/desktop/i.test(v.name));
+    if (enUsVoice) return enUsVoice;
+
+    return voices[0] || null;
+  }
+
+  /**
    * Speaks status or feedback text aloud to the user
    */
   speak(text) {
@@ -125,22 +155,40 @@ class VoiceController {
         utterance.rate = this.speechRate;
         utterance.pitch = this.speechPitch;
 
+        const bestVoice = this.findBestVoice(cleanText);
+        if (bestVoice) {
+          utterance.voice = bestVoice;
+          utterance.lang = bestVoice.lang;
+        }
+
+        // Keep reference to prevent premature garbage collection in Chrome
+        this._currentUtterance = utterance;
+
+        let finished = false;
+        let timeoutId = null;
+
+        const finish = () => {
+          if (!finished) {
+            finished = true;
+            if (timeoutId) clearTimeout(timeoutId);
+            this._currentUtterance = null;
+            this.isSpeaking = false;
+            this.onStateChange({ speaking: false });
+            resolve();
+          }
+        };
+
+        // Safety timeout: utterance must never permanently freeze the execution loop
+        const maxDurationMs = Math.max(2000, Math.min(12000, cleanText.length * 90));
+        timeoutId = setTimeout(finish, maxDurationMs);
+
         utterance.onstart = () => {
           this.isSpeaking = true;
           this.onStateChange({ speaking: true, text: cleanText });
         };
 
-        utterance.onend = () => {
-          this.isSpeaking = false;
-          this.onStateChange({ speaking: false });
-          resolve();
-        };
-
-        utterance.onerror = () => {
-          this.isSpeaking = false;
-          this.onStateChange({ speaking: false });
-          resolve();
-        };
+        utterance.onend = finish;
+        utterance.onerror = finish;
 
         window.speechSynthesis.speak(utterance);
       } catch (err) {

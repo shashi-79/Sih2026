@@ -1,24 +1,29 @@
 $ErrorActionPreference = "Stop"
 
+$workspaceRoot = Split-Path $PSScriptRoot -Parent
+$extensionDir = Join-Path $workspaceRoot "extension"
+
 $files = @(
-    "c:\Users\anamika sakal\Downloads\shashi\Sih\extension\manifest.json",
-    "c:\Users\anamika sakal\Downloads\shashi\Sih\extension\background\service-worker.js",
-    "c:\Users\anamika sakal\Downloads\shashi\Sih\extension\content\content-script.js",
-    "c:\Users\anamika sakal\Downloads\shashi\Sih\extension\content\playwright_driver.js",
-    "c:\Users\anamika sakal\Downloads\shashi\Sih\extension\offscreen\offscreen.js",
-    "c:\Users\anamika sakal\Downloads\shashi\Sih\extension\orchestrator\event_bus.js",
-    "c:\Users\anamika sakal\Downloads\shashi\Sih\extension\orchestrator\memory_layer.js",
-    "c:\Users\anamika sakal\Downloads\shashi\Sih\extension\orchestrator\gemma4_runner.js",
-    "c:\Users\anamika sakal\Downloads\shashi\Sih\extension\orchestrator\agent_controller.js",
-    "c:\Users\anamika sakal\Downloads\shashi\Sih\extension\sidepanel\voice_controller.js",
-    "c:\Users\anamika sakal\Downloads\shashi\Sih\extension\sidepanel\sidepanel.js",
-    "c:\Users\anamika sakal\Downloads\shashi\Sih\extension\sidepanel\permission.js"
+    (Join-Path $extensionDir "manifest.json"),
+    (Join-Path $extensionDir "background\service-worker.js"),
+    (Join-Path $extensionDir "background\cdp_controller.js"),
+    (Join-Path $extensionDir "content\content-script.js"),
+    (Join-Path $extensionDir "content\playwright_driver.js"),
+    (Join-Path $extensionDir "offscreen\offscreen.js"),
+    (Join-Path $extensionDir "orchestrator\event_bus.js"),
+    (Join-Path $extensionDir "orchestrator\memory_layer.js"),
+    (Join-Path $extensionDir "orchestrator\gemma4_runner.js"),
+    (Join-Path $extensionDir "orchestrator\agent_controller.js"),
+    (Join-Path $extensionDir "sidepanel\voice_controller.js"),
+    (Join-Path $extensionDir "sidepanel\sidepanel.js"),
+    (Join-Path $extensionDir "sidepanel\permission.js")
 )
 
 $hasErrors = $false
 
 Write-Host "==========================================================" -ForegroundColor Cyan
 Write-Host " Gemma 4 Browser Extension - File & Syntax Validation" -ForegroundColor Cyan
+Write-Host " Target Directory: $extensionDir" -ForegroundColor Cyan
 Write-Host "==========================================================" -ForegroundColor Cyan
 
 foreach ($f in $files) {
@@ -52,9 +57,7 @@ foreach ($f in $files) {
         $openBracket = ($code.ToCharArray() | Where-Object { $_ -eq '[' }).Count
         $closeBracket = ($code.ToCharArray() | Where-Object { $_ -eq ']' }).Count
 
-        $status = "OK"
         if ($openBrace -ne $closeBrace -or $openParen -ne $closeParen -or $openBracket -ne $closeBracket) {
-            $status = "MISMATCH"
             $hasErrors = $true
             Write-Host "[X] $name : Braces: { $openBrace vs } $closeBrace | Parens: ( $openParen vs ) $closeParen | Brackets: [ $openBracket vs ] $closeBracket" -ForegroundColor Red
         } else {

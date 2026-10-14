@@ -71,8 +71,9 @@ class EventBus {
   }
 }
 
-// Export as singleton or attach to window/global
+// Export as constructor and singleton on window
 if (typeof window !== 'undefined') {
+  window.EventBus = EventBus;
   window.AgentEventBus = new EventBus();
 }
 if (typeof module !== 'undefined') {

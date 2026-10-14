@@ -80,8 +80,8 @@ if ($TestMode) {
     Write-Host "[+] Offline config files generated successfully in $modelsDir" -ForegroundColor Green
     Write-Host "`n----------------------------------------------------------" -ForegroundColor Cyan
     Write-Host " Local Hybrid Ollama Setup (Recommended for 100% offline):" -ForegroundColor Cyan
-    Write-Host "   Run: ollama pull gemma-4:e2b" -ForegroundColor White
-    Write-Host "   Start: ollama run gemma-4:e2b" -ForegroundColor White
+    Write-Host "   Run: ollama pull gemma2:2b" -ForegroundColor White
+    Write-Host "   Start: ollama run gemma2:2b" -ForegroundColor White
     Write-Host "----------------------------------------------------------" -ForegroundColor Cyan
     return
 }
@@ -148,7 +148,7 @@ Write-Host "[+] Created local model manifest: $manifestPath" -ForegroundColor Gr
 
 Write-Host "`n----------------------------------------------------------" -ForegroundColor Cyan
 Write-Host " Local Hybrid Ollama Option (Zero Chrome VRAM consumption):" -ForegroundColor Cyan
-Write-Host "   Run: ollama pull gemma-4:e2b" -ForegroundColor White
+Write-Host "   Run: ollama pull gemma2:2b" -ForegroundColor White
 Write-Host "   Then toggle 'Localhost Ollama' in the extension sidepanel." -ForegroundColor White
 Write-Host "----------------------------------------------------------" -ForegroundColor Cyan
 Write-Host "Model setup process completed successfully!" -ForegroundColor Green

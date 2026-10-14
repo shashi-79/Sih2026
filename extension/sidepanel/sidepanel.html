@@ -28,7 +28,7 @@
         </div>
         <div class="pill pill-engine" id="enginePill" title="Inference Backend">
           <span class="dot dot-cyan"></span>
-          <span id="engineLabel">Chrome Built-in AI</span>
+          <span id="engineLabel">Connecting Ollama...</span>
         </div>
       </div>
     </header>
@@ -82,7 +82,11 @@
     <section class="card hud-card">
       <div class="hud-header">
         <span class="hud-title">Target Webpage</span>
-        <button id="refreshPageBtn" class="btn-text">🔄 Re-scan Page</button>
+        <div class="hud-btn-group">
+          <button id="injectScriptBtn" class="btn-text">⚡ Inject Script</button>
+          <button id="readPageBtn" class="btn-text">📖 Read Page</button>
+          <button id="refreshPageBtn" class="btn-text">🔄 Re-scan</button>
+        </div>
       </div>
       <div class="page-meta">
         <div class="page-title" id="pageTitleLabel">Checking active tab...</div>
@@ -94,13 +98,24 @@
           <span class="stat-name">Interactive Badges</span>
         </div>
         <div class="stat-box">
-          <span class="stat-number text-emerald" id="stepCountLabel">0 / 10</span>
-          <span class="stat-name">Steps</span>
+          <span class="stat-number text-emerald" id="stepCountLabel">Step 0</span>
+          <span class="stat-name">Steps (No Limit)</span>
         </div>
         <div class="stat-box">
           <span class="stat-number text-indigo" id="latencyLabel">0ms</span>
           <span class="stat-name">Gemma Latency</span>
         </div>
+      </div>
+    </section>
+
+    <!-- Autonomous Milestone Tracker -->
+    <section class="card milestone-card" id="milestoneSection" style="display: none;">
+      <div class="card-header">
+        <h2>🎯 Autonomous Milestones</h2>
+        <span class="hud-tag" id="milestoneProgressTag">0/0</span>
+      </div>
+      <div class="milestone-list" id="milestoneList">
+        <!-- Dynamically rendered milestones -->
       </div>
     </section>
 
@@ -122,25 +137,36 @@
     </section>
 
     <!-- Engine Settings Collapsible Drawer -->
-    <details class="card settings-card">
+    <details class="card settings-card" id="settingsDrawer" open>
       <summary class="settings-summary">
-        <span>⚙️ Inference & Voice Settings</span>
+        <span>⚙️ AI Model & Inference Engine</span>
       </summary>
       <div class="settings-body">
         <div class="setting-group">
-          <label for="backendSelect">Gemma 4 Runtime Mode:</label>
+          <label for="backendSelect">Offline AI Engine:</label>
           <select id="backendSelect">
-            <option value="chrome_ai">Chrome Built-in AI (window.ai - Zero VRAM Overhead)</option>
-            <option value="hybrid">Auto Hybrid (Embedded Engine / Fallback)</option>
-            <option value="webgpu">In-Browser WebGPU (Local Model Files)</option>
-            <option value="ollama">Localhost Ollama (gemma-4:e2b)</option>
+            <option value="ollama" selected>Localhost Ollama (100% Offline Server)</option>
+            <option value="chrome_ai">Chrome Built-in AI (window.ai - On-Device)</option>
+            <option value="webgpu">In-Browser WebGPU (Hardware Accelerated)</option>
           </select>
         </div>
-        <div class="setting-group">
+        <div class="setting-group" id="ollamaUrlGroup">
           <label for="ollamaUrl">Localhost Ollama Endpoint:</label>
-          <input type="text" id="ollamaUrl" value="http://localhost:11434" />
+          <input type="text" id="ollamaUrl" value="http://127.0.0.1:11434" />
         </div>
-        <div class="setting-group">
+        <div class="setting-group" style="display: flex; gap: 6px; margin-top: 4px;">
+          <button id="saveModelSettingsBtn" class="btn btn-primary" style="flex: 1;">
+            💾 Connect Ollama
+          </button>
+          <button id="reloadExtBtn" class="btn btn-secondary" style="flex: 1;" title="Reload Extension and Service Worker">
+            🔄 Reload Ext
+          </button>
+        </div>
+        <div class="setting-group" style="display: flex; align-items: center; justify-content: space-between; margin-top: 6px;">
+          <label for="cdpToggle" style="margin: 0; cursor: pointer;">Hardware CDP Events (isTrusted):</label>
+          <input type="checkbox" id="cdpToggle" checked style="width: auto; cursor: pointer;" />
+        </div>
+        <div class="setting-group" style="margin-top: 6px;">
           <label for="voiceRateSlider">Voice Feedback Speed:</label>
           <input type="range" id="voiceRateSlider" min="0.8" max="1.4" step="0.05" value="1.05" />
         </div>
